@@ -66,11 +66,9 @@ jobs:
             --output manifest.json \
             --oidc-token "${{ steps.oidc.outputs.token }}"
 
-      - name: Bundle and verify against the enrollment
-        run: |
-          set -euo pipefail
-          webcat bundle create --enrollment webcat/enrollment.json --manifest manifest.json --output bundle.json
-          webcat manifest verify bundle.json
+      # (`webcat manifest verify` only supports Sigsum enrollments; the extension verifies at runtime.)
+      - name: Bundle
+        run: webcat bundle create --enrollment webcat/enrollment.json --manifest manifest.json --output bundle.json
 
       - name: Add the WEBCAT files to the site
         run: |
