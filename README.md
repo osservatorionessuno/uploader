@@ -11,7 +11,8 @@ automatically after network failures.
 
 ## Configuration
 
-`config.json`, read at build time. The committed file is an example.
+`config.json`, read at build time. The committed file is the configuration of
+upload.osservatorionessuno.org; CI builds and signs from it.
 
 | Key | Meaning |
 |---|---|

@@ -9,7 +9,7 @@ uploader_src_dir: "{{ playbook_dir }}/.."
 
 # REQUIRED
 uploader_domain: uploader.example.org
-uploader_recipient: age1ue76l5r9mlar0hqa5wvypc2j4vfvgjssryj42jr2rxmt2pmhapmslgw99p # the example key: replace
+uploader_recipient: age1ue76l5r9mlar0hqa5wvypc2j4vfvgjssryj42jr2rxmt2pmhapmslgw99p # example key: replace
 
 uploader_onion: "" # .onion hostname once tor minted it; also sent as Onion-Location
 uploader_onion_port: 82 # loopback listener tor forwards the onion's :80 to
