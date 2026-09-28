@@ -81,7 +81,7 @@ pre code { color: var(--code-pre-text); }
   backdrop-filter: blur(1px);
   border-bottom: 1px var(--nav-border) solid;
 }
-.header-logo { display: flex; align-items: center; gap: 8px; font-weight: bold; text-transform: uppercase; color: var(--heading); }
+.header-logo { display: flex; align-items: center; gap: 8px; font-weight: bold; text-transform: uppercase; color: var(--link); }
 .header-logo img { height: 32px; }
 .header nav ul { display: flex; margin: 0; padding: 0; list-style: none; }
 .header nav a { display: block; padding: 10px; color: var(--heading); }
