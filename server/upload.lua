@@ -60,20 +60,26 @@ local function remove(id)
   os.remove(TMP .. id .. ".len")
 end
 
--- The .len sidecar: declared total and the plaintext's extension ("" if none).
+-- The only characters allowed in a stored extension: ASCII letters and digits, 1-8 of them.
+-- Everything that becomes part of a filesystem path goes through here or is 32 hex digits
+-- from the URL regex below, so no user-controlled slash, dot or NUL can reach a path.
+local function safe_ext(ext)
+  ext = (ext or ""):lower()
+  return (#ext > 0 and #ext <= 8 and ext:match("^[a-z0-9]+$")) and ext or ""
+end
+
+-- Extension as the uploader named it ("report.pdf.age" and "report.pdf" both give "pdf").
+local function clean_ext(name)
+  return safe_ext((name or ""):gsub("%.[Aa][Gg][Ee]$", ""):match("%.([A-Za-z0-9]+)$"))
+end
+
+-- The .len sidecar: declared total and the plaintext's extension ("" if none). Written by
+-- us, still re-validated on the way back.
 local function meta(id)
   local s = read_all(TMP .. id .. ".len")
   if not s then return nil end
-  local declared, ext = s:match("^(%d+) ?(%w*)")
-  return tonumber(declared), ext or ""
-end
-
--- Extension as the uploader named it ("report.pdf.age" and "report.pdf" both give "pdf"),
--- kept only if it is 1-8 letters or digits.
-local function clean_ext(name)
-  local ext = (name or ""):gsub("%.age$", ""):match("%.(%w+)$")
-  ext = ext and ext:lower() or ""
-  return (#ext <= 8 and ext:match("^[a-z0-9]+$")) and ext or ""
+  local declared, ext = s:match("^(%d+) ?([^\n]*)")
+  return tonumber(declared), safe_ext(ext)
 end
 
 local function final_name(id, ext)
