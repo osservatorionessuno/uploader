@@ -36,3 +36,7 @@ npm run build   # config.json + src/ + static/ -> dist/
 Debian host with nginx, `libnginx-mod-http-lua`, `lua-cjson` and acme.sh. The role builds the
 frontend on the controller from its variables (`deploy/playbook.yml` is an example), so
 `config.json` is not needed for deployment.
+
+## License
+
+BSD 3-Clause. See `LICENSE`.
