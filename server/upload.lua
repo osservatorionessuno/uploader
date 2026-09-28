@@ -1,12 +1,12 @@
 -- Uploader backend (content_by_lua_file), deployed by deploy/roles/uploader.
---   POST   /up            create, Upload-Length required            -> 201 {"id"}
+--   POST   /up            create, Upload-Length required, Upload-Ext optional -> 201 {"id"}
 --   HEAD   /up/<id>       bytes held                                -> 200 Upload-Offset
 --   PATCH  /up/<id>       append at Upload-Offset                   -> 204 Upload-Offset | 409 Upload-Offset
 --   POST   /up/<id>/done  size == declared, age magic, store, notify -> 200 {"id","size"} | 409 | 400
 --   DELETE /up/<id>       drop the partial                          -> 204
 --   POST   /up/form       no-JavaScript multipart path              -> result.html
 -- State is the filesystem: <base>/tmp/<id> (partial; its size is the offset), <id>.len
--- (declared total), <base>/<id>.age (finished). nginx spools bodies to disk first, Lua only
+-- ("<declared total> <ext>"), <base>/<id>[.<ext>].age (finished; ext is the plaintext's). nginx spools bodies to disk first, Lua only
 -- copies file to file. Check+append and check+rename run under a per-id lock: after a stall
 -- abort the old body may still be arriving while the client resumes.
 package.path = ngx.var.app_dir .. "/?.lua;" .. package.path
@@ -60,6 +60,26 @@ local function remove(id)
   os.remove(TMP .. id .. ".len")
 end
 
+-- The .len sidecar: declared total and the plaintext's extension ("" if none).
+local function meta(id)
+  local s = read_all(TMP .. id .. ".len")
+  if not s then return nil end
+  local declared, ext = s:match("^(%d+) ?(%w*)")
+  return tonumber(declared), ext or ""
+end
+
+-- Extension as the uploader named it ("report.pdf.age" and "report.pdf" both give "pdf"),
+-- kept only if it is 1-8 letters or digits.
+local function clean_ext(name)
+  local ext = (name or ""):gsub("%.age$", ""):match("%.(%w+)$")
+  ext = ext and ext:lower() or ""
+  return (#ext <= 8 and ext:match("^[a-z0-9]+$")) and ext or ""
+end
+
+local function final_name(id, ext)
+  return id .. (ext ~= "" and ("." .. ext) or "") .. ".age"
+end
+
 local function rand_id()
   local f = assert(io.open("/dev/urandom", "rb"))
   local b = f:read(16)
@@ -84,18 +104,18 @@ end
 
 -- Signed, expiring download URL for the notification. nginx secure_link checks the same
 -- md5(expiry/dl/id secret) in base64url; the uploader knows the id but not the secret.
-local function download_link(id)
+local function download_link(name)
   if not cfg.link_secret then return "" end
   local e = ngx.time() + cfg.link_days * 86400
-  local k = ngx.encode_base64(ngx.md5_bin(e .. "/dl/" .. id .. " " .. cfg.link_secret))
+  local k = ngx.encode_base64(ngx.md5_bin(e .. "/dl/" .. name .. " " .. cfg.link_secret))
   k = k:gsub("+", "-"):gsub("/", "_"):gsub("=", "")
-  return string.format("\nhttps://%s/dl/%s?k=%s&e=%d", cfg.domain, id, k, e)
+  return string.format("\nhttps://%s/dl/%s?k=%s&e=%d", cfg.domain, name, k, e)
 end
 
 -- Telegram via the internal /_tg proxy (the token lives there), one message per chat id.
 -- Best effort: failures are only logged.
-local function notify(id, size)
-  local text = string.format("%s: nuovo file %s (%.1f MiB)%s", cfg.domain, id, size / 1048576, download_link(id))
+local function notify(name, size)
+  local text = string.format("%s: nuovo file %s (%.1f MiB)%s", cfg.domain, name, size / 1048576, download_link(name))
   for _, chat in ipairs(cfg.telegram_chat_ids or {}) do
     local res = ngx.location.capture("/_tg", {
       method = ngx.HTTP_POST,
@@ -115,7 +135,7 @@ local function page(status, class, id)
 end
 
 -- Store [from, to) of the spooled body as a finished upload: magic check, size cap, notify.
-local function store_range(body, from, to)
+local function store_range(body, from, to, ext)
   local size = to - from
   if size > cfg.max_bytes then return page(413, "big") end
   local src = assert(io.open(body, "rb"))
@@ -138,8 +158,9 @@ local function store_range(body, from, to)
   end
   src:close()
   dst:close()
-  assert(os.rename(TMP .. id, cfg.base .. "/" .. id .. ".age"))
-  notify(id, size)
+  local name = final_name(id, ext)
+  assert(os.rename(TMP .. id, cfg.base .. "/" .. name))
+  notify(name, size)
   return page(200, "ok", id)
 end
 
@@ -167,7 +188,8 @@ if ngx.var.uri == "/up/form" then
   if fpos then _, hend = head:find("\r\n\r\n", fpos, true) end
   local tpos = tail:find("\r\n--" .. boundary .. "--", 1, true)
   if not hend or not tpos then return page(400, "err") end
-  return store_range(body, hend, total - tail_len + tpos - 1)
+  local ext = clean_ext(head:match('filename="([^"]*)"', fpos))
+  return store_range(body, hend, total - tail_len + tpos - 1, ext)
 end
 
 if ngx.var.uri == "/up" then
@@ -177,7 +199,7 @@ if ngx.var.uri == "/up" then
   if length > cfg.max_bytes then return say(413) end
   local id = rand_id()
   write(TMP .. id, "")
-  write(TMP .. id .. ".len", tostring(length))
+  write(TMP .. id .. ".len", length .. " " .. clean_ext("x." .. (ngx.var.http_upload_ext or "")))
   return say(201, { id = id })
 end
 
@@ -189,7 +211,8 @@ local part = TMP .. id
 if finalize then
   if method ~= "POST" then return say(405) end
   return with_lock(id, function()
-    local size, declared = size_of(part), tonumber(read_all(part .. ".len") or "")
+    local size = size_of(part)
+    local declared, ext = meta(id)
     if not size or not declared then return say(404) end
     if size ~= declared then return say(409, { error = "incomplete" }, { ["Upload-Offset"] = size }) end
     local f = io.open(part, "rb")
@@ -203,9 +226,10 @@ if finalize then
       remove(id)
       return say(400, { error = "not an age file" })
     end
-    assert(os.rename(part, cfg.base .. "/" .. id .. ".age"))
+    local name = final_name(id, ext)
+    assert(os.rename(part, cfg.base .. "/" .. name))
     os.remove(part .. ".len")
-    notify(id, size)
+    notify(name, size)
     return say(200, { id = id, size = size })
   end)
 end
@@ -230,7 +254,7 @@ if method == "PATCH" then
   local body = ngx.req.get_body_file() -- nil only for an empty body
   local n = body and size_of(body) or 0
   return with_lock(id, function()
-    local size, declared = size_of(part), tonumber(read_all(part .. ".len") or "")
+    local size, declared = size_of(part), meta(id)
     if not size or not declared then return say(404) end -- deleted meanwhile: do not resurrect it
     if size ~= offset then return say(409, nil, { ["Upload-Offset"] = size }) end
     if size + n > declared or size + n > cfg.max_bytes then return say(413) end

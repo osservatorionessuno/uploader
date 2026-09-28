@@ -179,6 +179,10 @@ async function encrypt(file: File): Promise<{ ct: Ciphertext; total: number }> {
   return { ct, total: out.size(file.size) };
 }
 
+// Extension of the plaintext, to name the stored ciphertext: "report.pdf" and "report.pdf.age"
+// both give "pdf". Letters and digits only, or nothing.
+const extOf = (name: string) => (name.replace(/\.age$/i, "").match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? "").toLowerCase();
+
 async function isAge(file: Blob): Promise<boolean> {
   const head = new TextDecoder().decode(await file.slice(0, 40).arrayBuffer());
   return AGE_MAGIC.some((m) => head.startsWith(m));
@@ -244,8 +248,9 @@ const online = () =>
         aborter.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
       });
 
-async function upload(ct: Ciphertext, total: number): Promise<string> {
-  const id = (await (await api("POST", "/up", { "Upload-Length": String(total) })).json()).id;
+async function upload(ct: Ciphertext, total: number, ext: string): Promise<string> {
+  const create = { "Upload-Length": String(total), ...(ext && { "Upload-Ext": ext }) };
+  const id = (await (await api("POST", "/up", create)).json()).id;
   if (typeof id !== "string" || !ID.test(id)) throw new Error("bad upload id");
   currentId = id;
   let offset = 0;
@@ -308,7 +313,7 @@ async function run(file: File) {
       source = await encrypt(file);
     }
     if (source.total > __MAX_BYTES__) throw httpError("size", 413);
-    show("done", await upload(source.ct, source.total));
+    show("done", await upload(source.ct, source.total, extOf(file.name)));
   } catch (e) {
     aborter.abort(); // stop the encryptor too
     source?.ct.fail(e as Error); // release waiters
