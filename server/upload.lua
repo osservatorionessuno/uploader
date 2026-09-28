@@ -82,15 +82,17 @@ local function with_lock(id, fn)
   end
 end
 
--- Telegram via the internal /_tg proxy (the token lives there). Best effort: failures are only logged.
+-- Telegram via the internal /_tg proxy (the token lives there), one message per chat id.
+-- Best effort: failures are only logged.
 local function notify(id, size)
-  if not cfg.telegram_chat_id then return end
   local text = string.format("%s: nuovo file %s (%.1f MiB)", cfg.domain, id, size / 1048576)
-  local res = ngx.location.capture("/_tg", {
-    method = ngx.HTTP_POST,
-    body = cjson.encode({ chat_id = cfg.telegram_chat_id, text = text }),
-  })
-  if res.status ~= 200 then ngx.log(ngx.ERR, "upload: telegram ", res.status, " ", res.body) end
+  for _, chat in ipairs(cfg.telegram_chat_ids or {}) do
+    local res = ngx.location.capture("/_tg", {
+      method = ngx.HTTP_POST,
+      body = cjson.encode({ chat_id = chat, text = text }),
+    })
+    if res.status ~= 200 then ngx.log(ngx.ERR, "upload: telegram ", chat, " ", res.status, " ", res.body) end
+  end
 end
 
 -- Answer to the no-JavaScript form: result.html from the web root with __CLASS__ and __ID__ filled.

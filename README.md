@@ -4,8 +4,8 @@ An anonymous, end-to-end encrypted file uploader. Files are encrypted in the
 browser with [age](https://age-encryption.org/) to a recipient public key fixed
 at build time, then uploaded in chunks; a file that is already age-encrypted is
 sent as is. The frontend is [typage](https://github.com/FiloSottile/typage) with
-a thin wrapper, the backend is Lua on nginx (OpenResty) and can notify a Telegram
-chat on each completed upload. There is no inherent
+a thin wrapper, the backend is Lua on nginx (OpenResty) and can notify Telegram
+chats on each completed upload. There is no inherent
 size limit, since nothing is held in full on either side, and uploads resume
 automatically after network failures.
 
