@@ -50,6 +50,7 @@
 		secure_link_md5 "$secure_link_expires/dl/$name {{ uploader_link_secret }}";
 		if ($secure_link = "")  { return 403; }
 		if ($secure_link = "0") { return 410; }
+		error_page 403 404 410 /gone.html; # invalid, gone, expired: one static answer
 		alias {{ uploader_base }}/$name;
 		default_type application/octet-stream;
 		add_header Content-Disposition 'attachment; filename="$name"';
