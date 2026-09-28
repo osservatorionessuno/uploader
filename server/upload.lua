@@ -4,7 +4,7 @@
 --   PATCH  /up/<id>       append at Upload-Offset                   -> 204 Upload-Offset | 409 Upload-Offset
 --   POST   /up/<id>/done  size == declared, age magic, store, notify -> 200 {"id","size"} | 409 | 400
 --   DELETE /up/<id>       drop the partial                          -> 204
---   POST   /up/form       no-JavaScript multipart path              -> result.html
+--   POST   /up/form       no-JavaScript multipart path              -> 303 done.html | error.html
 -- State is the filesystem: <base>/tmp/<id> (partial; its size is the offset), <id>.len
 -- ("<declared total> <ext>"), <base>/<id>[.<ext>].age (finished; ext is the plaintext's). nginx spools bodies to disk first, Lua only
 -- copies file to file. Check+append and check+rename run under a per-id lock: after a stall
@@ -131,13 +131,12 @@ local function notify(name, size)
   end
 end
 
--- Answer to the no-JavaScript form: result.html from the web root with __CLASS__ and __ID__ filled.
-local function page(status, class, id)
-  ngx.status = status
+-- Answer to the no-JavaScript form: a redirect to a static page (every HTML must be fixed at
+-- signing time for WEBCAT), the id travelling in the query string.
+local function page(_, class, id)
   ngx.header["Cache-Control"] = "no-store"
-  ngx.header["Content-Type"] = "text/html; charset=utf-8"
-  local html = read_all(ngx.var.document_root .. "/result.html") or "<h1>__CLASS__ __ID__</h1>"
-  ngx.print((html:gsub("__CLASS__", class):gsub("__ID__", id or "")))
+  ngx.header["Location"] = class == "ok" and ("/done.html?id=" .. id) or ("/error.html?reason=" .. class)
+  ngx.status = 303
 end
 
 -- Store [from, to) of the spooled body as a finished upload: magic check, size cap, notify.

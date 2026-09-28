@@ -15,7 +15,7 @@ rmSync("dist", { recursive: true, force: true }); // dist is exactly this build
 mkdirSync("dist");
 const stamp = (s) =>
   s.replaceAll("__RECIPIENT__", cfg.recipient).replaceAll("__ONION__", cfg.onion).replaceAll("__MAX_GIB__", String(cfg.maxGiB));
-for (const page of ["index.html", "result.html"]) writeFileSync(`dist/${page}`, stamp(readFileSync(`src/${page}`, "utf8")));
+for (const page of ["index.html", "done.html", "error.html"]) writeFileSync(`dist/${page}`, stamp(readFileSync(`src/${page}`, "utf8")));
 for (const f of readdirSync("static")) copyFileSync(`static/${f}`, `dist/${f}`);
 
 const options = {

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Upload - Osservatorio Nessuno</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="stylesheet" href="/upload.css">
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-title">
+        <a class="header-logo" href="https://osservatorionessuno.org/">
+          <img height="32px" src="/logo.svg" alt="logo-osservatorio-nessuno">
+          <span>Osservatorio Nessuno</span>
+        </a>
+      </div>
+    </header>
+    <main class="wrapper">
+      <section class="invert full sub">
+        <div>
+          <!-- Target of the no-JavaScript form on failure. Static. -->
+          <dialog class="err" open>
+            <div class="icon" aria-hidden="true"></div>
+            <h2><span lang="it">Invio non riuscito</span><span lang="en">Upload failed</span></h2>
+            <p><span lang="it">Il file non inizia con l'intestazione di age, oppure supera il limite di
+              __MAX_GIB__ GB. Cifralo con age e riprova.</span>
+              <span lang="en">The file does not start with the age header, or exceeds the __MAX_GIB__ GB
+              limit. Encrypt it with age and try again.</span></p>
+            <p><a class="button text" href="/"><span lang="it">Indietro</span><span lang="en">Back</span></a></p>
+          </dialog>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

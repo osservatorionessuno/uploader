@@ -1,0 +1,88 @@
+# Build the site from config.json and sign it for WEBCAT with Sigstore, using this workflow's
+# GitHub OIDC identity (no long-lived keys). Runs on version tags; the enrollment in
+# webcat/enrollment.json only trusts signatures made by this file on refs/tags/*, so a preview
+# build from a branch cannot produce a manifest the extension would accept.
+#
+# Output: a GitHub release with site-<tag>.tar.gz (dist/ including .well-known/webcat/
+# {enrollment,manifest,bundle}.json) and the three JSON files as separate assets.
+name: Build and sign for WEBCAT
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release
+  id-token: write # Sigstore OIDC
+
+jobs:
+  build-sign-release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Build the site
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run check
+          npm run build
+
+      - name: Install WEBCAT CLI
+        run: npm install --global @freedomofpress/webcat-cli
+
+      - name: Stamp the version into the WEBCAT config
+        run: sed -i "s|\${VERSION_PLACEHOLDER}|${VERSION}|" webcat/webcat.config.json
+
+      - name: Generate the manifest
+        run: |
+          set -euo pipefail
+          webcat manifest generate --type sigstore \
+            --config webcat/webcat.config.json \
+            --directory dist \
+            --output manifest_unsigned.json
+
+      - name: Get a GitHub OIDC token for Sigstore
+        id: oidc
+        run: |
+          set -euo pipefail
+          TOKEN="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sigstore" | jq -r .value)"
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the manifest
+        run: |
+          set -euo pipefail
+          webcat manifest sign --type sigstore \
+            --input manifest_unsigned.json \
+            --output manifest.json \
+            --oidc-token "${{ steps.oidc.outputs.token }}"
+
+      - name: Bundle and verify against the enrollment
+        run: |
+          set -euo pipefail
+          webcat bundle create --enrollment webcat/enrollment.json --manifest manifest.json --output bundle.json
+          webcat manifest verify bundle.json
+
+      - name: Add the WEBCAT files to the site
+        run: |
+          set -euo pipefail
+          mkdir -p dist/.well-known/webcat
+          cp webcat/enrollment.json manifest.json bundle.json dist/.well-known/webcat/
+          tar -C dist -czf "site-${VERSION}.tar.gz" .
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$VERSION" --title "$VERSION" --generate-notes \
+            "site-${VERSION}.tar.gz" webcat/enrollment.json manifest.json bundle.json

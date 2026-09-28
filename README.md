@@ -37,6 +37,16 @@ Debian host with nginx, `libnginx-mod-http-lua`, `lua-cjson` and acme.sh. The ro
 frontend on the controller from its variables (`deploy/playbook.yml` is an example), so
 `config.json` is not needed for deployment.
 
+## WEBCAT
+
+`.github/workflows/webcat.yml` builds the site on every `v*` tag, generates a
+[WEBCAT](https://webcat.tech/) manifest for it, signs the manifest with Sigstore
+using the workflow's GitHub OIDC identity, and publishes `dist/` with
+`.well-known/webcat/{enrollment,manifest,bundle}.json` as a GitHub release.
+`webcat/enrollment.json` trusts only signatures made by that workflow on tags of
+this repository; `webcat/webcat.config.json` declares the CSP the server must
+send. Deploy the release artifact, not a local build, on an enrolled origin.
+
 ## License
 
 BSD 3-Clause. See `LICENSE`.

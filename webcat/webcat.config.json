@@ -1,0 +1,8 @@
+{
+  "app": "https://github.com/osservatorionessuno/uploader",
+  "version": "${VERSION_PLACEHOLDER}",
+  "default_csp": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "default_index": "index.html",
+  "default_fallback": "/index.html",
+  "extra_csp": {}
+}

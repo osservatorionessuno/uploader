@@ -4,7 +4,7 @@
 	root {{ uploader_web_dir }};
 	index index.html;
 	error_page 404 /index.html;
-	add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+	add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" always;
 	add_header X-Content-Type-Options nosniff always;
 	add_header Referrer-Policy no-referrer always;
 
@@ -58,9 +58,6 @@
 
 	location ~* \.(?:css|js|map|svg)$ {
 		expires 1y;
-	}
-	location = /result.html {
-		internal; # template for the no-JS form result, read from disk by upload.lua
 	}
 {% endmacro %}
 
