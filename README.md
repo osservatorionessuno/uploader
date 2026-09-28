@@ -45,11 +45,12 @@ npm run build   # config.json + src/ + static/ -> dist/
 
 `dist/` is the deployable site: `index.html`, `upload.js` with its source map,
 `result.html` (rendered by the server for the no-JavaScript form), the
-stylesheets and the logo. The bundle is not minified. `dist/` is not committed;
+stylesheet and the logo. The bundle is not minified. `dist/` is not committed;
 it is a function of `config.json`.
 
-`static/style.css`, `static/navbar.css` and `static/logo.svg` are copies of the
-same files in the Osservatorio Nessuno website repository, kept in sync by hand.
+`static/upload.css` is the whole stylesheet: the colours, type and layout values
+of the Osservatorio Nessuno website, reduced to the rules this page uses.
+`static/logo.svg` is a copy from the website repository.
 
 ## Protocol
 
