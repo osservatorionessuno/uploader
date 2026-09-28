@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Upload - Osservatorio Nessuno</title>
+    <!-- TEMPLATE: build.mjs stamps __RECIPIENT__ and __ONION__ from config.json into
+         files/web/index.html. Edit config.json, not the generated file. -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/navbar.css">
+    <link rel="stylesheet" href="/upload.css">
+    <script type="module" src="/upload.js"></script>
+  </head>
+  <body>
+    <input type="checkbox" class="toggle" id="menu-toggle">
+    <header class="header">
+      <div class="header-title">
+        <a class="header-logo" href="https://osservatorionessuno.org/">
+          <img height="32px" src="/logo.svg" alt="logo-osservatorio-nessuno">
+          <span>Osservatorio Nessuno</span>
+        </a>
+      </div>
+      <nav class="main-menu" aria-label="Main navigation">
+        <ul class="main">
+          <li class="menu-item"><a href="https://osservatorionessuno.org/">osservatorionessuno.org</a></li>
+          <li class="menu-item"><a href="https://bugbane.org/">bugbane.org</a></li>
+          <li class="menu-item"><a id="lang" href="#"><span lang="en">it</span><span lang="it">en</span></a></li>
+        </ul>
+      </nav>
+      <div class="hamburger-trigger">
+        <label for="menu-toggle" class="hamburger">Menu</label>
+      </div>
+    </header>
+
+    <main class="wrapper">
+      <section class="full">
+        <div lang="it">
+          <h1>Inviaci un file</h1>
+          <p>
+            Il file viene cifrato <strong>nel tuo browser</strong> con <a href="https://age-encryption.org/">age</a>.
+            Se preferisci, cifralo tu con il comando qui sotto.
+          </p>
+          <pre><code>age -r <span class="recipient">__RECIPIENT__</span> -o file.age file</code></pre>
+          <p>
+            Per l'anonimato usa <a href="https://www.torproject.org/">Tor Browser</a> e il nostro onion service:
+            <code class="onion">__ONION__</code>.
+          </p>
+          <p>Per verificare l'integrità di questo uploader usa <a href="https://webcat.tech/">WEBCAT</a>.</p>
+        </div>
+        <div lang="en">
+          <h1>Send us a file</h1>
+          <p>
+            The file is encrypted <strong>in your browser</strong> with <a href="https://age-encryption.org/">age</a>.
+            If you prefer, encrypt it yourself with the command below.
+          </p>
+          <pre><code>age -r <span class="recipient">__RECIPIENT__</span> -o file.age file</code></pre>
+          <p>
+            For anonymity use <a href="https://www.torproject.org/">Tor Browser</a> and our onion service:
+            <code class="onion">__ONION__</code>.
+          </p>
+          <p>To verify the integrity of this uploader use <a href="https://webcat.tech/">WEBCAT</a>.</p>
+        </div>
+      </section>
+
+      <section class="invert full sub">
+        <div>
+          <!-- The one message component. Ships open (inline, no JavaScript needed) showing the
+               "JavaScript is off" notice; upload.js closes it, then reuses it as a modal for the
+               outcome by revealing one [data-key] block. #ref shows the upload id or error detail. -->
+          <dialog id="notice" class="err" open>
+            <div class="icon" aria-hidden="true"></div>
+            <div data-key="nojs">
+              <h2><span lang="it">JavaScript disattivato</span><span lang="en">JavaScript is disabled</span></h2>
+              <p><span lang="it">Serve JavaScript per cifrare nel browser (in Tor Browser il livello "Il più sicuro" lo blocca).
+                Se hai già cifrato il file con age, spunta la casella e caricalo comunque.</span>
+                <span lang="en">JavaScript is required for client-side encryption (Tor Browser's "Safest" level blocks it).
+                If you pre-encrypted the file with age, tick the box and upload anyway.</span></p>
+              <!-- Plain multipart POST handled by the backend without any script. The checkbox is
+                   `required` (browser-enforced); the server checks the age header regardless. -->
+              <form method="post" action="/up/form" enctype="multipart/form-data" class="nojs-form">
+                <label class="check"><input type="checkbox" name="age" required>
+                  <span lang="it">il file è cifrato con age</span><span lang="en">the file is encrypted with age</span></label>
+                <input type="file" name="file" required>
+                <button class="button text">Upload</button>
+              </form>
+            </div>
+            <div data-key="done" hidden>
+              <h2><span lang="it">File ricevuto</span><span lang="en">File received</span></h2>
+              <p><span lang="it">Se ci contatti riguardo a questo file, indica il seguente identificativo:</span>
+                <span lang="en">If you contact us about this file, please mention the following id:</span></p>
+            </div>
+            <div data-key="tooBig" hidden>
+              <h2><span lang="it">File troppo grande</span><span lang="en">File too large</span></h2>
+              <p><span lang="it">Il limite è __MAX_GIB__ GB.</span><span lang="en">The limit is __MAX_GIB__ GB.</span></p>
+            </div>
+            <div data-key="error" hidden>
+              <h2><span lang="it">Qualcosa è andato storto</span><span lang="en">Something went wrong</span></h2>
+              <p><span lang="it">L'invio non è riuscito. Riprova; se il problema persiste, questo è l'errore:</span>
+                <span lang="en">The upload did not go through. Try again; if it keeps failing, this is the error:</span></p>
+            </div>
+            <p><code id="ref"></code></p>
+            <form method="dialog" hidden><button class="button text"><span lang="it">Chiudi</span><span lang="en">Close</span></button></form>
+          </dialog>
+          <div id="drop" class="drop" hidden>
+            <label for="file" class="button text"><span lang="it">Scegli un file</span><span lang="en">Choose a file</span></label>
+            <input id="file" type="file">
+            <p class="hint"><span lang="it">dimensione massima __MAX_GIB__ GB</span><span lang="en">maximum size __MAX_GIB__ GB</span></p>
+          </div>
+
+          <div id="status" hidden>
+            <div class="bar">
+              <strong>Upload</strong>
+              <progress id="up-bar" max="1" value="0"></progress>
+              <span id="up-text"></span>
+              <span id="lost" hidden><span lang="it">connessione persa, riprovo tra </span><span lang="en">connection lost, retrying in </span><span id="backoff"></span>s…</span>
+            </div>
+            <div class="actions">
+              <button id="cancel" class="button text"><span lang="it">Annulla</span><span lang="en">Cancel</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <section class="half">
+        <div class="left">
+          <strong>Osservatorio Nessuno</strong> OdV
+          <span lang="it">è un'organizzazione di volontariato.</span><span lang="en">is a nonprofit organization.</span>
+        </div>
+        <div class="right"><a href="https://osservatorionessuno.org/">osservatorionessuno.org</a></div>
+      </section>
+    </footer>
+  </body>
+</html>

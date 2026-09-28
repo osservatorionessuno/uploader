@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Upload - Osservatorio Nessuno</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/navbar.css">
+    <link rel="stylesheet" href="/upload.css">
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-title">
+        <a class="header-logo" href="https://osservatorionessuno.org/">
+          <img height="32px" src="/logo.svg" alt="logo-osservatorio-nessuno">
+          <span>Osservatorio Nessuno</span>
+        </a>
+      </div>
+    </header>
+    <main class="wrapper">
+      <section class="invert full sub">
+        <div>
+          <!-- Rendered by upload.lua for the no-JavaScript form: __CLASS__ is ok|err|big, __ID__ the upload id. -->
+          <dialog class="__CLASS__" open>
+            <div class="icon" aria-hidden="true"></div>
+            <div data-key="done">
+              <h2><span lang="it">File ricevuto</span><span lang="en">File received</span></h2>
+              <p><span lang="it">Se ci contatti riguardo a questo file, indica il seguente identificativo:</span>
+                <span lang="en">If you contact us about this file, please mention the following id:</span></p>
+              <p><code>__ID__</code></p>
+            </div>
+            <div data-key="error">
+              <h2><span lang="it">Non è un file age</span><span lang="en">Not an age file</span></h2>
+              <p><span lang="it">Il file non inizia con l'intestazione di age. Cifralo con age e riprova.</span>
+                <span lang="en">The file does not start with the age header. Encrypt it with age and try again.</span></p>
+            </div>
+            <div data-key="tooBig">
+              <h2><span lang="it">File troppo grande</span><span lang="en">File too large</span></h2>
+            </div>
+            <p><a class="button text" href="/"><span lang="it">Indietro</span><span lang="en">Back</span></a></p>
+          </dialog>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
