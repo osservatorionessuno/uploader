@@ -4,8 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width">
     <title>Upload - Osservatorio Nessuno</title>
-    <!-- TEMPLATE: build.mjs stamps __RECIPIENT__ and __ONION__ from config.json into
-         files/web/index.html. Edit config.json, not the generated file. -->
+    <!-- Template: build.mjs stamps __RECIPIENT__, __ONION__ and __MAX_GIB__ from config.json. -->
     <link rel="icon" type="image/svg+xml" href="/logo.svg">
     <link rel="stylesheet" href="/upload.css">
     <script type="module" src="/upload.js"></script>
@@ -59,9 +58,8 @@
 
       <section class="invert full sub">
         <div>
-          <!-- The one message component. Ships open (inline, no JavaScript needed) showing the
-               "JavaScript is off" notice; upload.js closes it, then reuses it as a modal for the
-               outcome by revealing one [data-key] block. #ref shows the upload id or error detail. -->
+          <!-- The one message component: open inline as the no-JavaScript notice; upload.js
+               closes it and reuses it as a modal, revealing one [data-key] block. -->
           <dialog id="notice" class="err" open>
             <div class="icon" aria-hidden="true"></div>
             <div data-key="nojs">
@@ -70,8 +68,8 @@
                 Se hai già cifrato il file con age, spunta la casella e caricalo comunque.</span>
                 <span lang="en">JavaScript is required for client-side encryption (Tor Browser's "Safest" level blocks it).
                 If you pre-encrypted the file with age, tick the box and upload anyway.</span></p>
-              <!-- Plain multipart POST handled by the backend without any script. The checkbox is
-                   `required` (browser-enforced); the server checks the age header regardless. -->
+              <!-- Works without a script: multipart POST. The checkbox is `required`; the server
+                   checks the age header anyway. -->
               <form method="post" action="/up/form" enctype="multipart/form-data" class="nojs-form">
                 <label class="check"><input type="checkbox" name="age" required>
                   <span lang="it">il file è cifrato con age</span><span lang="en">the file is encrypted with age</span></label>

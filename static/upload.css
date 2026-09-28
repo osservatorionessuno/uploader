@@ -1,5 +1,5 @@
-/* The whole stylesheet. Values (colours, type, radii, widths) are those of osservatorionessuno.org,
-   reduced to the rules this page uses. Two blocks: the site look, then the uploader's own parts. */
+/* The only stylesheet: the site's colours, type and layout reduced to what this page uses,
+   then the uploader's own parts. */
 
 /* ---- site look ---------------------------------------------------------------------- */
 :root {
@@ -20,7 +20,7 @@
   --code-border: #424242;
   --code-text: #333;
   --code-pre-text: #b4b4b4;
-  --ok: #2e7d32; /* not in the site palette: success needs a colour that is not the brand red */
+  --ok: #2e7d32; /* success colour; the brand red means error */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -161,9 +161,8 @@ html[lang="en"] [lang="it"], html[lang="it"] [lang="en"] { display: none; }
   .bar span { grid-column: 1 / -1; text-align: left; white-space: normal; }
 }
 
-/* The one message component (#notice, and result.html). Open without JavaScript it renders
-   inline where it sits; opened by the script with showModal() it is a centred modal.
-   .ok / .err / .big pick icon, accent and which block shows. */
+/* Message component (#notice, and result.html): inline when open without a script, a centred
+   modal via showModal(). Class ok/err/big picks icon, accent and which block shows. */
 dialog {
   max-width: 480px;
   padding: 30px 40px;

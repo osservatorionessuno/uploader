@@ -1,31 +1,26 @@
-// upload.osservatorionessuno.org — anonymous drop box.
-// 1. Encrypt the file in the browser with age to the configured recipient, unless it already
-//    starts with the age header (encrypted at home). The server checks the header anyway.
-// 2. Upload the ciphertext in chunks (tus-style: POST creates, PATCH appends at Upload-Offset,
-//    HEAD reports the current offset) while it is still being produced: the encryptor folds
-//    finished bytes into a growing Blob and the uploader sends each full chunk as soon as it
-//    exists, so the total time is max(encrypt, upload) rather than the sum. Confirmed bytes are
-//    dropped and the encryptor pauses beyond WINDOW unconfirmed ones, so memory stays bounded.
-//    On a network error we wait for the network, ask the server where it got to, and resume
-//    from there. Unconfirmed ciphertext exists only in the tab: a page reload starts over.
+// Anonymous drop box: encrypt in the browser with age, upload in resumable chunks.
+// Encryption and upload overlap. The encryptor folds ciphertext into a growing Blob; the
+// uploader sends each full chunk as soon as it exists and drops what the server confirmed;
+// beyond WINDOW unconfirmed bytes the encryptor pauses, so memory is bounded. On a network
+// error: wait, ask the server its offset, resume. A page reload starts over.
+// Protocol: POST /up, PATCH /up/<id> at Upload-Offset, HEAD /up/<id>, POST /up/<id>/done.
 import { Encrypter } from "age-encryption";
 
-declare const __CHUNK_BYTES__: number; // config.json chunkMiB; the server's per-request body cap must allow it
+declare const __CHUNK_BYTES__: number; // chunkMiB in config.json; must fit the server's per-request body cap
 const CHUNK = __CHUNK_BYTES__;
-const WINDOW = 64 * 1024 * 1024; // max unconfirmed ciphertext held in memory; encryption pauses beyond it
+const WINDOW = 64 * 1024 * 1024; // unconfirmed ciphertext kept in memory before the encryptor pauses
 const STALL_MS = 30000;
 const AGE_MAGIC = ["age-encryption.org/v1", "-----BEGIN AGE ENCRYPTED FILE-----"];
 const ID = /^[a-f0-9]{32}$/;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-declare const __RECIPIENT__: string; // injected by build.mjs from config.json
-declare const __MAX_BYTES__: number;  // same cap the server enforces (413); checked here first for a clear message
+declare const __RECIPIENT__: string; // from config.json via build.mjs
+declare const __MAX_BYTES__: number; // same cap as the server; checked first for a clear message
 const recipient = __RECIPIENT__;
 
-// ---- i18n: all copy, including every outcome message, is duplicated in the HTML under
-// lang="it"/"en" and toggled by CSS on <html lang>. The script only moves numbers and ids
-// into slots. English unless the browser says Italian (Tor Browser always says en-US,
-// hence the manual toggle in the nav bar).
+// All copy is in the HTML twice (lang="it"/"en"); CSS shows one by <html lang>, the script
+// only fills slots. English unless the browser says Italian; Tor Browser always says en-US,
+// hence the toggle.
 const html = document.documentElement;
 html.lang = navigator.language.toLowerCase().startsWith("it") ? "it" : "en";
 $("lang").addEventListener("click", (e) => { e.preventDefault(); html.lang = html.lang === "it" ? "en" : "it"; });
@@ -40,29 +35,28 @@ const lost = $("lost");
 const notice = $<HTMLDialogElement>("notice");
 notice.addEventListener("close", () => { status.hidden = true; });
 
-// The one message component: reveal the block for `key`, put `detail` (upload id or error
-// text) in the code slot, open as a modal. Success is "done", everything else is an error.
+// Reveal one [data-key] block of the dialog, fill the code slot, open as a modal.
 function show(key: string, detail = "") {
   notice.querySelectorAll<HTMLElement>("[data-key]").forEach((el) => (el.hidden = el.dataset.key !== key));
   $("ref").textContent = detail;
   notice.className = key === "done" ? "ok" : "err";
   notice.showModal();
 }
-// The page ships with the "JavaScript is off" notice open and the drop box hidden; swap them now.
+// Without JavaScript the page shows the notice and hides the drop box; swap them.
 notice.close();
 notice.querySelector("form")!.hidden = false;
 drop.hidden = false;
 
 let cancelled = false;
-let aborter = new AbortController(); // cancels sleeps, waits and control requests of the current run
+let aborter = new AbortController(); // aborts sleeps, waits and control requests of this run
 let currentXhr: XMLHttpRequest | null = null;
 let currentId: string | null = null;
 
 const fmt = (b: number) =>
   b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} KiB` : `${(b / 1024 / 1024).toFixed(1)} MiB`;
 
-// Drives the <progress> + readout: "42% · 300.0 MiB / 700.0 MiB · 12.3 MiB/s · ~33s".
-// Redraws at most every 100ms; the speed is measured over the last 5 seconds.
+// <progress> + readout "42% · 300.0 MiB / 700.0 MiB · 12.3 MiB/s · ~33s".
+// Redraws at most every 100ms; speed over the last 5s.
 function meter(bar: HTMLProgressElement, text: HTMLElement, total: number) {
   const samples: [number, number][] = []; // last 5s of [time, bytes]
   let shown = 0;
@@ -103,19 +97,16 @@ cancelBtn.addEventListener("click", () => {
   currentXhr?.abort();
   if (currentId) void fetch(`/up/${currentId}`, { method: "DELETE" }).catch(() => {});
 });
-// A reload would throw away the in-memory ciphertext mid-transfer; ask first.
+// A reload discards the unconfirmed ciphertext; ask first.
 addEventListener("beforeunload", (e) => { if (drop.hidden) e.preventDefault(); });
 
 // ---- phase 1: encrypt -------------------------------------------------------
-// The ciphertext as it is being produced and consumed. `blob` holds bytes [base, base+size):
-// the encryptor folds finished bytes in CHUNK-sized steps (Response.blob() would keep everything
-// on the JS heap; a Blob lives in the browser's blob storage), the uploader waits on
-// `available()` for the range it needs and `drop()`s what the server has confirmed. Holding
-// more than WINDOW unconfirmed bytes makes `space()` block, which stops the encryptor from
-// pulling more plaintext, so memory stays bounded whatever the file size.
+// Ciphertext in flight. `blob` holds bytes [base, base+size): the encryptor pushes, the
+// uploader waits on available(), slices, and drop()s confirmed bytes; space() blocks the
+// producer beyond WINDOW. A Blob lives outside the JS heap, unlike Response.blob()'s buffers.
 class Ciphertext {
   blob = new Blob();
-  base = 0; // absolute offset of blob[0]; everything before it was confirmed by the server and dropped
+  base = 0; // absolute offset of blob[0]; earlier bytes were confirmed and dropped
   done = false;
   error: Error | null = null;
   private wake: (() => void) | null = null;
@@ -150,15 +141,14 @@ class Ciphertext {
     while (this.base + this.blob.size < end && !this.done && !this.error) await new Promise<void>((r) => (this.wake = r));
     if (this.error) throw this.error;
   }
-  /** Resolves once fewer than WINDOW unconfirmed bytes are held (backpressure for the producer). */
+  /** Waits while WINDOW or more unconfirmed bytes are held. */
   async space() {
     while (this.blob.size + this.pending >= WINDOW && !this.error) await new Promise<void>((r) => (this.wakeSpace = r));
     if (this.error) throw this.error;
   }
 }
 
-// Starts encrypting `file`; returns the ciphertext being produced and its final size (age
-// computes it from the plaintext size, so Upload-Length is known before the first byte).
+// Starts encrypting `file`. age derives the final size up front, so Upload-Length is known too.
 async function encrypt(file: File): Promise<{ ct: Ciphertext; total: number }> {
   const enc = new Encrypter();
   enc.addRecipient(recipient);
@@ -168,8 +158,7 @@ async function encrypt(file: File): Promise<{ ct: Ciphertext; total: number }> {
       async transform(chunk, ctl) {
         if (aborter.signal.aborted) throw new Error("cancelled");
         ctl.enqueue(chunk);
-        // The pipeline runs on promise continuations and never lets the browser paint;
-        // yield one macrotask every ~100ms so the upload bar and its readout actually move.
+        // The stream pipeline never yields to the event loop; give the browser a paint every ~100ms.
         if (performance.now() - painted > 100) {
           await new Promise((r) => setTimeout(r));
           painted = performance.now();
@@ -181,7 +170,7 @@ async function encrypt(file: File): Promise<{ ct: Ciphertext; total: number }> {
   const ct = new Ciphertext();
   (async () => {
     for (const r = (out as ReadableStream<Uint8Array<ArrayBuffer>>).getReader(); ; ) {
-      await ct.space(); // not reading = backpressure all the way up to file.stream()
+      await ct.space(); // not reading = backpressure up to file.stream()
       const { done, value } = await r.read();
       if (done) return ct.finish();
       ct.push(value);
@@ -196,9 +185,7 @@ async function isAge(file: Blob): Promise<boolean> {
 }
 
 // ---- phase 2: resumable chunked upload ---------------------------------------
-// Only two failures are retried: a network error ("network") and 409 (offset mismatch,
-// resynced via HEAD). Anything else - other HTTP statuses, a server answering with
-// offsets that make no sense - aborts the transfer instead of guessing.
+// Retried: network errors and 409 (offset resynced via HEAD). Everything else aborts.
 type HttpError = Error & { status?: number };
 const httpError = (what: string, status: number): HttpError => Object.assign(new Error(`${what}: HTTP ${status}`), { status });
 const retryable = (e: Error) => e.message === "network" || (e as HttpError).status === 409;
@@ -210,7 +197,7 @@ async function api(method: string, path: string, headers: Record<string, string>
   return r;
 }
 
-// Server-reported offset, checked against what we can know locally.
+// Server-reported offset, bounded by what we know.
 function offsetFrom(value: string | null, min: number, max: number): number {
   const n = Number(value);
   if (value === null || !Number.isInteger(n) || n < min || n > max) throw new Error(`bad Upload-Offset: ${value}`);
@@ -224,8 +211,7 @@ function patch(id: string, offset: number, chunk: Blob, onProgress: (sent: numbe
     xhr.open("PATCH", `/up/${id}`);
     xhr.setRequestHeader("Upload-Offset", String(offset));
     xhr.setRequestHeader("Content-Type", "application/offset+octet-stream");
-    // Tor circuits can stall silently instead of resetting: treat 30s without upload
-    // progress as a network error so the resume path kicks in.
+    // Tor circuits can stall silently: no progress for STALL_MS counts as a network error.
     let stall = setTimeout(() => xhr.abort(), STALL_MS);
     xhr.upload.onprogress = (e) => {
       clearTimeout(stall);
@@ -235,17 +221,16 @@ function patch(id: string, offset: number, chunk: Blob, onProgress: (sent: numbe
     xhr.onloadend = () => clearTimeout(stall);
     xhr.onload = () => {
       if (xhr.status !== 204) return reject(httpError("PATCH", xhr.status));
-      const want = offset + chunk.size; // a 204 means the whole chunk was appended, nothing else is acceptable
+      const want = offset + chunk.size; // 204 means the whole chunk was appended
       try { resolve(offsetFrom(xhr.getResponseHeader("Upload-Offset"), want, want)); } catch (e) { reject(e); }
     };
     xhr.onerror = () => reject(new Error("network"));
-    xhr.onabort = () => reject(new Error(cancelled ? "cancelled" : "network")); // our own stall abort resumes
+    xhr.onabort = () => reject(new Error(cancelled ? "cancelled" : "network")); // stall abort resumes, user abort cancels
     xhr.send(chunk);
   });
 }
 
-// Both resolve early (rejecting) when the user cancels, so cancel takes effect at once
-// instead of after a 30s backoff.
+// Reject on cancel so it takes effect at once, not after the backoff.
 const sleep = (ms: number) =>
   new Promise<void>((resolve, reject) => {
     const t = setTimeout(resolve, ms);
@@ -270,10 +255,10 @@ async function upload(ct: Ciphertext, total: number): Promise<string> {
     if (cancelled) throw new Error("cancelled");
     try {
       const end = Math.min(offset + CHUNK, total);
-      await ct.available(end); // encryption may still be ahead of us or not
+      await ct.available(end); // may wait for the encryptor
       if (ct.done && ct.base + ct.blob.size !== total) throw new Error(`ciphertext is ${ct.base + ct.blob.size} bytes, announced ${total}`);
       offset = await patch(id, offset, ct.slice(offset, end), m.update);
-      ct.drop(offset); // confirmed by the server: never needed again, even on resume
+      ct.drop(offset); // confirmed: never needed again
       backoff = 1000;
     } catch (e) {
       if (cancelled || !retryable(e as Error)) throw e;
@@ -284,19 +269,17 @@ async function upload(ct: Ciphertext, total: number): Promise<string> {
       backoff = Math.min(backoff * 2, 30000);
       await online();
       try {
-        // The server only appends, so its offset is at least what it last confirmed to us; bytes
-        // below ct.base are gone on our side, a smaller answer means the server lost data.
+        // The server only appends; below ct.base we hold nothing, a smaller answer means it lost data.
         offset = offsetFrom((await api("HEAD", `/up/${id}`)).headers.get("Upload-Offset"), ct.base, total);
         m.reset();
         lost.hidden = true;
         upText.hidden = false;
       } catch (e) {
-        if (!retryable(e as Error)) throw e; // e.g. 404: the partial is gone, no point retrying
+        if (!retryable(e as Error)) throw e; // e.g. 404: the partial is gone
       }
     }
   }
-  // Cancel may have landed while we were sleeping above, after the server already had every
-  // byte: the loop then exits on its own and must not finalize a transfer the user gave up on.
+  // A cancel during the sleep above can leave the loop by its condition; never finalize then.
   if (cancelled) throw new Error("cancelled");
   await api("POST", `/up/${id}/done`);
   return id;
@@ -316,7 +299,7 @@ async function run(file: File) {
   let source: { ct: Ciphertext; total: number } | undefined;
   try {
     if (await isAge(file)) {
-      // Already carries the age header (encrypted at home): send it as is.
+      // already age-encrypted: send as is
       const ct = new Ciphertext();
       ct.blob = file;
       ct.finish();
@@ -327,9 +310,9 @@ async function run(file: File) {
     if (source.total > __MAX_BYTES__) throw httpError("size", 413);
     show("done", await upload(source.ct, source.total));
   } catch (e) {
-    aborter.abort(); // stop the encryptor too if the upload is what failed
-    source?.ct.fail(e as Error); // and release anything waiting on the ciphertext
-    if (cancelled) status.hidden = true; // back to the empty drop box, nothing to report
+    aborter.abort(); // stop the encryptor too
+    source?.ct.fail(e as Error); // release waiters
+    if (cancelled) status.hidden = true; // back to the drop box
     else if ((e as HttpError).status === 413) show("tooBig");
     else show("error", (e as Error).message);
   } finally {
