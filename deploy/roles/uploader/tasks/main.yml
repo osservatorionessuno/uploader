@@ -1,7 +1,7 @@
 ---
 # --- Frontend, option A: build on the controller from the role's variables ---
 - name: Build the frontend (controller)
-  when: not uploader_release
+  when: uploader_release | length == 0
   delegate_to: localhost
   become: false
   run_once: true
@@ -22,7 +22,7 @@
 
 # --- Frontend, option B: the signed release artifact ---
 - name: Fetch and verify the signed release (controller)
-  when: uploader_release
+  when: uploader_release | length > 0
   delegate_to: localhost
   become: false
   run_once: true
