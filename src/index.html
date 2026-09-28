@@ -7,13 +7,10 @@
     <!-- TEMPLATE: build.mjs stamps __RECIPIENT__ and __ONION__ from config.json into
          files/web/index.html. Edit config.json, not the generated file. -->
     <link rel="icon" type="image/svg+xml" href="/logo.svg">
-    <link rel="stylesheet" href="/style.css">
-    <link rel="stylesheet" href="/navbar.css">
     <link rel="stylesheet" href="/upload.css">
     <script type="module" src="/upload.js"></script>
   </head>
   <body>
-    <input type="checkbox" class="toggle" id="menu-toggle">
     <header class="header">
       <div class="header-title">
         <a class="header-logo" href="https://osservatorionessuno.org/">
@@ -21,16 +18,13 @@
           <span>Osservatorio Nessuno</span>
         </a>
       </div>
-      <nav class="main-menu" aria-label="Main navigation">
-        <ul class="main">
-          <li class="menu-item"><a href="https://osservatorionessuno.org/">osservatorionessuno.org</a></li>
-          <li class="menu-item"><a href="https://bugbane.org/">bugbane.org</a></li>
-          <li class="menu-item"><a id="lang" href="#"><span lang="en">it</span><span lang="it">en</span></a></li>
+      <nav aria-label="Main navigation">
+        <ul>
+          <li><a href="https://osservatorionessuno.org/">osservatorionessuno.org</a></li>
+          <li><a href="https://bugbane.org/">bugbane.org</a></li>
+          <li><a id="lang" href="#"><span lang="en">it</span><span lang="it">en</span></a></li>
         </ul>
       </nav>
-      <div class="hamburger-trigger">
-        <label for="menu-toggle" class="hamburger">Menu</label>
-      </div>
     </header>
 
     <main class="wrapper">

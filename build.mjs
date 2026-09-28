@@ -6,7 +6,7 @@
 // config.json: the recipient and sizes are injected into the script (define); recipient,
 // onion and size cap are stamped into the HTML so they show without JavaScript too.
 import { build, context } from "esbuild";
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Encrypter } from "age-encryption";
 
 const cfg = JSON.parse(readFileSync("config.json", "utf8"));
@@ -14,7 +14,8 @@ new Encrypter().addRecipient(cfg.recipient); // throws on a malformed key: fail 
 if (!/^[a-z2-7]{56}\.onion$/.test(cfg.onion)) throw new Error(`config.json: bad onion hostname ${cfg.onion}`);
 if (!(cfg.maxGiB > 0) || !(cfg.chunkMiB > 0)) throw new Error("config.json: maxGiB and chunkMiB must be positive");
 
-mkdirSync("dist", { recursive: true });
+rmSync("dist", { recursive: true, force: true }); // dist is exactly this build, nothing stale
+mkdirSync("dist");
 const stamp = (s) =>
   s.replaceAll("__RECIPIENT__", cfg.recipient).replaceAll("__ONION__", cfg.onion).replaceAll("__MAX_GIB__", String(cfg.maxGiB));
 for (const page of ["index.html", "result.html"]) writeFileSync(`dist/${page}`, stamp(readFileSync(`src/${page}`, "utf8")));
