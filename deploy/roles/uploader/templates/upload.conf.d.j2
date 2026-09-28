@@ -1,0 +1,3 @@
+{{ ansible_managed | comment }}
+# http-level bits for upload.lua: the per-upload lock table (ngx.shared add/delete).
+lua_shared_dict upload_locks 1m;

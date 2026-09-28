@@ -1,0 +1,143 @@
+---
+# --- Frontend: build on the controller from the role's variables ---
+- name: Build the frontend (controller)
+  delegate_to: localhost
+  become: false
+  run_once: true
+  block:
+    - name: Write build config
+      ansible.builtin.template:
+        src: config.json.j2
+        dest: "{{ uploader_src_dir }}/.deploy-config.json"
+        mode: "0644"
+    - name: npm ci && npm run build
+      ansible.builtin.shell: npm ci --no-audit --no-fund && npm run build
+      args:
+        chdir: "{{ uploader_src_dir }}"
+      environment:
+        UPLOADER_CONFIG: "{{ uploader_src_dir }}/.deploy-config.json"
+      changed_when: true
+
+# --- Directories ---
+- name: Create store directories (nginx worker writes here)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0750"
+  loop:
+    - "{{ uploader_base }}"
+    - "{{ uploader_base }}/tmp"
+    - "{{ uploader_base }}/body"
+
+- name: Create app/web/log directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "0755"
+  loop:
+    - { path: "/var/www/{{ uploader_domain }}", owner: root }
+    - { path: "{{ uploader_app_dir }}", owner: root }
+    - { path: "{{ uploader_web_dir }}", owner: www-data }
+    - { path: "{{ uploader_logs }}", owner: root }
+
+# --- Backend ---
+- name: Deploy Lua handler
+  ansible.builtin.copy:
+    src: "{{ uploader_src_dir }}/server/"
+    dest: "{{ uploader_app_dir }}/"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx # lua_code_cache: changed Lua needs a reload
+
+- name: Render handler config
+  ansible.builtin.template:
+    src: upload_config.lua.j2
+    dest: "{{ uploader_app_dir }}/upload_config.lua"
+    owner: root
+    group: www-data
+    mode: "0640"
+  notify: reload nginx
+
+- name: Render http-level nginx snippet (lock table)
+  ansible.builtin.template:
+    src: upload.conf.d.j2
+    dest: "{{ uploader_nginx_conf_d }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+# --- Frontend: copy the build ---
+- name: Deploy static frontend
+  ansible.builtin.copy:
+    src: "{{ uploader_src_dir }}/dist/"
+    dest: "{{ uploader_web_dir }}/"
+    owner: www-data
+    group: www-data
+    mode: "0644"
+
+# --- TLS: self-signed bootstrap so nginx 443 can load, then issue via Let's Encrypt ---
+- name: Check for an existing cert
+  ansible.builtin.stat:
+    path: "{{ uploader_ssl_cert }}"
+  register: _uploader_cert
+
+- name: Bootstrap a self-signed cert
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -x509 -newkey rsa:2048 -nodes -days 2
+      -subj "/CN={{ uploader_domain }}"
+      -keyout {{ uploader_ssl_key }} -out {{ uploader_ssl_cert }}
+    creates: "{{ uploader_ssl_cert }}"
+  when: not _uploader_cert.stat.exists
+
+- name: Lock down the key
+  ansible.builtin.file:
+    path: "{{ uploader_ssl_key }}"
+    owner: root
+    group: root
+    mode: "0600"
+  ignore_errors: "{{ ansible_check_mode }}" # absent in check mode
+
+# --- nginx vhost (carries the Telegram bot token in proxy_pass: root-only) ---
+- name: Render vhost
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "/etc/nginx/sites-available/{{ uploader_domain }}.conf"
+    owner: root
+    group: root
+    mode: "0640"
+  notify: reload nginx
+
+- name: Enable vhost
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ uploader_domain }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ uploader_domain }}.conf"
+    state: link
+  ignore_errors: "{{ ansible_check_mode }}" # target absent in check mode
+  notify: reload nginx
+
+- name: Reload nginx now so http-01 is live
+  ansible.builtin.meta: flush_handlers
+
+- name: Issue real TLS cert (Let's Encrypt)
+  ansible.builtin.command:
+    cmd: >-
+      {{ uploader_acme_sh }} --issue --server letsencrypt
+      -d {{ uploader_domain }} -w {{ uploader_acme_webroot }}
+      --fullchain-file {{ uploader_ssl_cert }} --key-file {{ uploader_ssl_key }}
+    creates: "/root/.acme.sh/{{ uploader_domain }}_ecc/{{ uploader_domain }}.cer"
+  register: _uploader_acme
+  changed_when: _uploader_acme.rc == 0
+  failed_when: false
+  notify: reload nginx
+
+- name: Note acme.sh outcome
+  ansible.builtin.debug:
+    msg: "acme.sh did not issue a cert (rc={{ _uploader_acme.rc }}); DNS not converged yet? Re-run later."
+  when: _uploader_acme.rc is defined and _uploader_acme.rc != 0

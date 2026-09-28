@@ -1,0 +1,93 @@
+{{ ansible_managed | comment }}
+{# Everything the public TLS server and the onion server share. #}
+{% macro app() %}
+	root {{ uploader_web_dir }};
+	index index.html;
+	error_page 404 /index.html;
+	add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+	add_header X-Content-Type-Options nosniff always;
+	add_header Referrer-Policy no-referrer always;
+
+	# API. nginx spools each body to the store's disk, upload.lua appends it; the cap here
+	# bounds one chunk, the total is checked against Upload-Length. `set` sits at server level
+	# because it runs only in the matched location. Exact /up plus prefix /up/: a bare
+	# `^~ /up` would also swallow /upload.js and /upload.css.
+	set $app_dir {{ uploader_app_dir }};
+	location = /up {
+		content_by_lua_file {{ uploader_app_dir }}/upload.lua;
+	}
+	location ^~ /up/ {
+		client_max_body_size {{ uploader_chunk_max }};
+		client_body_in_file_only clean;
+		client_body_temp_path {{ uploader_base }}/body;
+		content_by_lua_file {{ uploader_app_dir }}/upload.lua;
+
+		# No-JavaScript path: the whole pre-encrypted file in one multipart POST.
+		location = /up/form {
+			client_max_body_size {{ uploader_max_gib * 1024 * 1024 * 1024 }};
+			content_by_lua_file {{ uploader_app_dir }}/upload.lua;
+		}
+	}
+{% if uploader_telegram_token %}
+
+	# Telegram notification target for ngx.location.capture("/_tg") in the handler.
+	location = /_tg {
+		internal;
+		proxy_pass https://api.telegram.org/bot{{ uploader_telegram_token }}/sendMessage;
+		proxy_set_header Host api.telegram.org;
+		proxy_set_header Content-Type application/json;
+		proxy_ssl_server_name on;
+		proxy_ssl_verify on;
+		proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+	}
+{% endif %}
+
+	location ~* \.(?:css|js|map|svg)$ {
+		expires 1y;
+	}
+	location = /result.html {
+		internal; # template for the no-JS form result, read from disk by upload.lua
+	}
+{% endmacro %}
+
+server {
+	listen 80;
+	listen [::]:80;
+	server_name {{ uploader_domain }};
+	access_log off;
+
+	location ^~ /.well-known/acme-challenge/ {
+		root {{ uploader_acme_webroot | regex_replace('/$', '') }};
+	}
+	location / {
+		return 301 https://{{ uploader_domain }}$request_uri;
+	}
+}
+
+server {
+	listen 443 ssl http2;
+	listen [::]:443 ssl http2;
+	server_name {{ uploader_domain }};
+
+	# No access log by design.
+	access_log off;
+	error_log {{ uploader_logs }}/error_log error;
+
+	ssl_certificate     {{ uploader_ssl_cert }};
+	ssl_certificate_key {{ uploader_ssl_key }};
+	ssl_protocols TLSv1.2 TLSv1.3;
+	ssl_prefer_server_ciphers on;
+	add_header Strict-Transport-Security "max-age=63072000" always;
+{% if uploader_onion %}
+	add_header Onion-Location http://{{ uploader_onion }}$request_uri always;
+{% endif %}
+{{ app() }}
+}
+
+# Onion service target (tor forwards the .onion's :80 here). Plain HTTP on loopback.
+server {
+	listen 127.0.0.1:{{ uploader_onion_port }};
+	access_log off;
+	error_log {{ uploader_logs }}/error_onion_log error;
+{{ app() }}
+}

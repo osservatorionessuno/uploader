@@ -1,0 +1,12 @@
+-- {{ ansible_managed }}
+-- The Telegram bot token is not here: it lives in the nginx /_tg proxy_pass.
+return {
+  domain = "{{ uploader_domain }}",
+  base = "{{ uploader_base }}",
+  max_bytes = {{ uploader_max_gib * 1024 * 1024 * 1024 }},
+{% if uploader_telegram_token and uploader_telegram_chat_id %}
+  telegram_chat_id = "{{ uploader_telegram_chat_id }}",
+{% else %}
+  telegram_chat_id = nil, -- notifications off
+{% endif %}
+}

@@ -1,0 +1,36 @@
+---
+# Deploys the uploader on a Debian host with nginx + libnginx-mod-http-lua + lua-cjson +
+# acme.sh already installed. Requires node/npm on the controller: the frontend is built there
+# from the values below (see config.json in the repo for their meaning), then copied.
+# Override the marked values per host. The role can be used from another repo (e.g. as a
+# submodule): set uploader_src_dir to this repo's root.
+
+uploader_src_dir: "{{ playbook_dir }}/.."
+
+# REQUIRED
+uploader_domain: uploader.example.org
+uploader_recipient: age1ue76l5r9mlar0hqa5wvypc2j4vfvgjssryj42jr2rxmt2pmhapmslgw99p # the example key: replace
+
+uploader_onion: "" # .onion hostname once tor minted it; also sent as Onion-Location
+uploader_onion_port: 82 # loopback listener tor forwards the onion's :80 to
+uploader_max_gib: 5 # size limit, enforced by the handler and checked by the client
+uploader_chunk_mib: 4 # client chunk size; the per-request body cap below must allow it
+uploader_chunk_max: "{{ uploader_chunk_mib * 4 }}m"
+
+# Partials (tmp/), nginx body spool (body/) and finished uploads (<id>.age). One filesystem.
+uploader_base: /var/lib/uploader
+uploader_app_dir: "/var/www/{{ uploader_domain }}/app"
+uploader_web_dir: "/var/www/{{ uploader_domain }}/htdocs"
+uploader_logs: "/var/www/{{ uploader_domain }}/logs"
+uploader_nginx_conf_d: /etc/nginx/conf.d/uploader.conf
+
+# TLS: self-signed bootstrap so 443 loads, then acme.sh via HTTP-01 from this webroot.
+# Renewal is left to the host's existing acme.sh cron.
+uploader_acme_sh: /usr/bin/acme.sh
+uploader_acme_webroot: "{{ uploader_web_dir }}"
+uploader_ssl_cert: "/etc/ssl/certs/{{ uploader_domain }}.pem"
+uploader_ssl_key: "/etc/ssl/private/{{ uploader_domain }}.key"
+
+# Telegram notification per finished upload; empty values disable it.
+uploader_telegram_token: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/secrets/telegram.token', errors='ignore') | default('', true) | trim }}"
+uploader_telegram_chat_id: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/secrets/telegram.chat_id', errors='ignore') | default('', true) | trim }}"

@@ -1,0 +1,12 @@
+---
+# Example. Put the hosts in an inventory group `uploader`, set the REQUIRED variables, run:
+#   ansible-playbook -i inventory deploy/playbook.yml
+# Telegram: deploy/secrets/telegram.token and telegram.chat_id (both gitignored).
+- name: Deploy the uploader
+  hosts: uploader
+  become: true
+  vars:
+    uploader_domain: uploader.example.org
+    uploader_recipient: age1ue76l5r9mlar0hqa5wvypc2j4vfvgjssryj42jr2rxmt2pmhapmslgw99p
+  roles:
+    - uploader

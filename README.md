@@ -29,3 +29,10 @@ npm run build   # config.json + src/ + static/ -> dist/
 ```
 
 `dist/` is the site to serve. It is not committed, as it depends on the configuration.
+
+## Deploy
+
+`server/upload.lua` is the backend, `deploy/` an Ansible role that installs both halves on a
+Debian host with nginx, `libnginx-mod-http-lua`, `lua-cjson` and acme.sh. The role builds the
+frontend on the controller from its variables (`deploy/playbook.yml` is an example), so
+`config.json` is not needed for deployment.

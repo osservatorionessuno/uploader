@@ -1,2 +1,4 @@
 node_modules/
 dist/
+.deploy-config.json
+deploy/secrets/
