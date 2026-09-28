@@ -4,9 +4,10 @@
 // 2. Upload the ciphertext in chunks (tus-style: POST creates, PATCH appends at Upload-Offset,
 //    HEAD reports the current offset) while it is still being produced: the encryptor folds
 //    finished bytes into a growing Blob and the uploader sends each full chunk as soon as it
-//    exists, so the total time is max(encrypt, upload) rather than the sum. On a network error
-//    we wait for the network, ask the server where it got to, and resume from there. The
-//    ciphertext lives in that Blob for the life of the tab, so a page reload starts over.
+//    exists, so the total time is max(encrypt, upload) rather than the sum. Confirmed bytes are
+//    dropped and the encryptor pauses beyond WINDOW unconfirmed ones, so memory stays bounded.
+//    On a network error we wait for the network, ask the server where it got to, and resume
+//    from there. Unconfirmed ciphertext exists only in the tab: a page reload starts over.
 import { Encrypter } from "age-encryption";
 
 declare const __CHUNK_BYTES__: number; // config.json chunkMiB; the server's per-request body cap must allow it

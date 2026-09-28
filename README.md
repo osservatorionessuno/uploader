@@ -26,6 +26,7 @@ The reference deployment is Lua on nginx at upload.osservatorionessuno.org.
 ## Configuration
 
 `config.json` is read at build time. All values end up in the generated files.
+The committed file is an example; its key is a throwaway.
 
 | Key | Meaning |
 |---|---|
@@ -44,7 +45,8 @@ npm run build   # config.json + src/ + static/ -> dist/
 
 `dist/` is the deployable site: `index.html`, `upload.js` with its source map,
 `result.html` (rendered by the server for the no-JavaScript form), the
-stylesheets and the logo. The bundle is not minified.
+stylesheets and the logo. The bundle is not minified. `dist/` is not committed;
+it is a function of `config.json`.
 
 `static/style.css`, `static/navbar.css` and `static/logo.svg` are copies of the
 same files in the Osservatorio Nessuno website repository, kept in sync by hand.
@@ -67,16 +69,11 @@ A server must apply the offset check and the append as one atomic step per id,
 and must not accept `done` for a partial whose size differs from the declared
 length. The client retries only on network errors and `409`.
 
-## Development
+## Reference deployment
 
-```
-python3 dev/mock_server.py            # reference backend on http://127.0.0.1:8089, serves dist/
-dev/smoke.sh [base_url]               # protocol acceptance test against any backend
-```
-
-The mock injects faults through environment variables: `FLAKY` (fraction of
-chunks reset mid-request), `STALL` (fraction that hang), `RATE` (bytes per
-second), `MAX` (size limit in bytes).
+The production backend (Lua on nginx, Ansible role, reference mock server and
+protocol acceptance test) is maintained with the infrastructure that runs
+upload.osservatorionessuno.org.
 
 ## Security properties
 
