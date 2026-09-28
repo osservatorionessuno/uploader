@@ -42,6 +42,20 @@
 	}
 {% endif %}
 
+{% if uploader_link_secret %}
+
+	# Ciphertext download for the notification links: signed + expiring (see download_link()).
+	location ~ "^/dl/(?<id>[a-f0-9]{32})$" {
+		secure_link $arg_k,$arg_e;
+		secure_link_md5 "$secure_link_expires/dl/$id {{ uploader_link_secret }}";
+		if ($secure_link = "")  { return 403; }
+		if ($secure_link = "0") { return 410; }
+		alias {{ uploader_base }}/$id.age;
+		default_type application/octet-stream;
+		add_header Content-Disposition 'attachment; filename="$id.age"';
+	}
+{% endif %}
+
 	location ~* \.(?:css|js|map|svg)$ {
 		expires 1y;
 	}

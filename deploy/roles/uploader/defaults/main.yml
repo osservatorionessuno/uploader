@@ -32,6 +32,10 @@ uploader_ssl_cert: "/etc/ssl/certs/{{ uploader_domain }}.pem"
 uploader_ssl_key: "/etc/ssl/private/{{ uploader_domain }}.key"
 
 # Telegram notification per finished upload to every chat id listed (whitespace-separated);
-# empty values disable it.
+# empty values disable it. With a link secret (e.g. `openssl rand -hex 32`) the message also
+# carries a signed download URL for the ciphertext, valid uploader_link_days; the uploader,
+# who only knows the id, cannot forge it.
+uploader_link_secret: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/secrets/link.secret', errors='ignore') | default('', true) | trim }}"
+uploader_link_days: 30
 uploader_telegram_token: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/secrets/telegram.token', errors='ignore') | default('', true) | trim }}"
 uploader_telegram_chat_ids: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/secrets/telegram.chat_ids', errors='ignore') | default('', true) | trim }}"

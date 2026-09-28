@@ -82,10 +82,20 @@ local function with_lock(id, fn)
   end
 end
 
+-- Signed, expiring download URL for the notification. nginx secure_link checks the same
+-- md5(expiry/dl/id secret) in base64url; the uploader knows the id but not the secret.
+local function download_link(id)
+  if not cfg.link_secret then return "" end
+  local e = ngx.time() + cfg.link_days * 86400
+  local k = ngx.encode_base64(ngx.md5_bin(e .. "/dl/" .. id .. " " .. cfg.link_secret))
+  k = k:gsub("+", "-"):gsub("/", "_"):gsub("=", "")
+  return string.format("\nhttps://%s/dl/%s?k=%s&e=%d", cfg.domain, id, k, e)
+end
+
 -- Telegram via the internal /_tg proxy (the token lives there), one message per chat id.
 -- Best effort: failures are only logged.
 local function notify(id, size)
-  local text = string.format("%s: nuovo file %s (%.1f MiB)", cfg.domain, id, size / 1048576)
+  local text = string.format("%s: nuovo file %s (%.1f MiB)%s", cfg.domain, id, size / 1048576, download_link(id))
   for _, chat in ipairs(cfg.telegram_chat_ids or {}) do
     local res = ngx.location.capture("/_tg", {
       method = ngx.HTTP_POST,

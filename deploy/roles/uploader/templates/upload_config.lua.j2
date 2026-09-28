@@ -4,6 +4,12 @@ return {
   domain = "{{ uploader_domain }}",
   base = "{{ uploader_base }}",
   max_bytes = {{ uploader_max_gib * 1024 * 1024 * 1024 }},
+{% if uploader_link_secret %}
+  link_secret = "{{ uploader_link_secret }}", -- signs the download URLs in notifications
+  link_days = {{ uploader_link_days }},
+{% else %}
+  link_secret = nil, -- no download links in notifications
+{% endif %}
 {% if uploader_telegram_token and uploader_telegram_chat_ids %}
   telegram_chat_ids = { {% for c in uploader_telegram_chat_ids.split() %}"{{ c }}", {% endfor %}},
 {% else %}
