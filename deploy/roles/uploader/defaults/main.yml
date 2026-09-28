@@ -7,6 +7,13 @@
 
 uploader_src_dir: "{{ playbook_dir }}/.."
 
+# Which frontend to deploy. Empty: build locally from the variables below (needs node on the
+# controller). A tag, e.g. "v0.2": download that GitHub release (site-<tag>.tar.gz, built and
+# WEBCAT-signed by .github/workflows/webcat.yml), verify its bundle against webcat/enrollment.json
+# with the WEBCAT CLI (npx), and deploy exactly those bytes. Required for an enrolled origin.
+uploader_release: ""
+uploader_release_repo: osservatorionessuno/uploader
+
 # REQUIRED
 uploader_domain: uploader.example.org
 uploader_recipient: age1ue76l5r9mlar0hqa5wvypc2j4vfvgjssryj42jr2rxmt2pmhapmslgw99p # example key: replace
