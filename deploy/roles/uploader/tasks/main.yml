@@ -4,6 +4,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  check_mode: false # local build, harmless; the copy below needs dist/ even in check mode
   block:
     - name: Write build config
       ansible.builtin.template:
